@@ -3,15 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Box, Stack, Typography, Button, Modal, TextField, MenuItem, Select, InputLabel, FormControl } from '@mui/material'
 import { firestore } from '@/firebase'
-import {
-  collection,
-  doc,
-  getDocs,
-  query,
-  setDoc,
-  deleteDoc,
-  getDoc,
-} from 'firebase/firestore'
+import { collection, doc, getDocs, query, setDoc, deleteDoc, getDoc } from 'firebase/firestore'
 
 const modalStyle = {
   position: 'absolute',
@@ -42,7 +34,7 @@ export default function Home() {
   const [currentItem, setCurrentItem] = useState(null)
   const [itemName, setItemName] = useState('')
   const [quantity, setQuantity] = useState(1)
-  const [weight, setWeight] = useState('')
+  const [weight, setWeight] = useState(0)
   const [unit, setUnit] = useState('kg')
   const [category, setCategory] = useState(categories[0])
   const [searchQuery, setSearchQuery] = useState('')
@@ -63,13 +55,17 @@ export default function Home() {
   const handleCloseUpdate = () => setOpenUpdate(false)
 
   const updateInventory = async () => {
-    const snapshot = query(collection(firestore, 'pantry'))
-    const docs = await getDocs(snapshot)
-    const inventoryList = []
-    docs.forEach((doc) => {
-      inventoryList.push({ name: doc.id, ...doc.data() })
-    })
-    setInventory(inventoryList)
+    try {
+      const snapshot = query(collection(firestore, 'pantry'))
+      const docs = await getDocs(snapshot)
+      const inventoryList = []
+      docs.forEach((doc) => {
+        inventoryList.push({ name: doc.id, ...doc.data() })
+      })
+      setInventory(inventoryList)
+    } catch (error) {
+      console.error("Error updating inventory:", error)
+    }
   }
   
   useEffect(() => {
@@ -85,43 +81,55 @@ export default function Home() {
   }, [searchQuery, minQuantity, maxWeight, inventory])
 
   const addItem = async (item, quantity, weight, unit, category) => {
-    const docRef = doc(collection(firestore, 'pantry'), item)
-    const docSnap = await getDoc(docRef)
-    if (docSnap.exists()) {
-      const { quantity: currentQuantity, weight: currentWeight } = docSnap.data()
-      await setDoc(docRef, { 
-        quantity: currentQuantity + quantity,
-        weight: (currentWeight * currentQuantity + weight * quantity) / (currentQuantity + quantity),
-        unit,
-        category
-      })
-    } else {
-      await setDoc(docRef, { quantity, weight, unit, category })
+    try {
+      const docRef = doc(collection(firestore, 'pantry'), item)
+      const docSnap = await getDoc(docRef)
+      if (docSnap.exists()) {
+        const { quantity: currentQuantity, weight: currentWeight } = docSnap.data()
+        await setDoc(docRef, { 
+          quantity: currentQuantity + quantity,
+          weight: (currentWeight * currentQuantity + weight * quantity) / (currentQuantity + quantity),
+          unit,
+          category
+        })
+      } else {
+        await setDoc(docRef, { quantity, weight, unit, category })
+      }
+      await updateInventory()
+    } catch (error) {
+      console.error("Error adding item:", error)
     }
-    await updateInventory()
   }
 
   const updateItem = async (item, quantity, weight, unit, category) => {
-    const docRef = doc(collection(firestore, 'pantry'), item)
-    const docSnap = await getDoc(docRef)
-    if (docSnap.exists()) {
-      await setDoc(docRef, { quantity, weight, unit, category })
+    try {
+      const docRef = doc(collection(firestore, 'pantry'), item)
+      const docSnap = await getDoc(docRef)
+      if (docSnap.exists()) {
+        await setDoc(docRef, { quantity, weight, unit, category })
+      }
+      await updateInventory()
+    } catch (error) {
+      console.error("Error updating item:", error)
     }
-    await updateInventory()
   }
 
   const removeItem = async (item) => {
-    const docRef = doc(collection(firestore, 'pantry'), item)
-    const docSnap = await getDoc(docRef)
-    if (docSnap.exists()) {
-      const { quantity, weight } = docSnap.data()
-      if (quantity === 1) {
-        await deleteDoc(docRef)
-      } else {
-        await setDoc(docRef, { quantity: quantity - 1, weight })
+    try {
+      const docRef = doc(collection(firestore, 'pantry'), item)
+      const docSnap = await getDoc(docRef)
+      if (docSnap.exists()) {
+        const { quantity, weight } = docSnap.data()
+        if (quantity === 1) {
+          await deleteDoc(docRef)
+        } else {
+          await setDoc(docRef, { quantity: quantity - 1, weight })
+        }
       }
+      await updateInventory()
+    } catch (error) {
+      console.error("Error removing item:", error)
     }
-    await updateInventory()
   }
 
   return (
@@ -134,6 +142,7 @@ export default function Home() {
         alignItems={'center'}
         gap={2}
       >
+        {/* Add Item Modal */}
         <Modal
           open={openAdd}
           onClose={handleCloseAdd}
@@ -170,7 +179,7 @@ export default function Home() {
                 variant="outlined"
                 fullWidth
                 value={weight}
-                onChange={(e) => setWeight(parseFloat(e.target.value) || '')}
+                onChange={(e) => setWeight(parseFloat(e.target.value) || 0)}
                 InputProps={{ inputProps: { min: 0 } }}
               />
               <FormControl fullWidth>
@@ -211,7 +220,7 @@ export default function Home() {
                   addItem(itemName, quantity, weight, unit, category)
                   setItemName('')
                   setQuantity(1)
-                  setWeight('')
+                  setWeight(0)
                   setUnit('kg')
                   setCategory(categories[0])
                   handleCloseAdd()
@@ -223,6 +232,7 @@ export default function Home() {
           </Box>
         </Modal>
 
+        {/* Update Item Modal */}
         <Modal
           open={openUpdate}
           onClose={handleCloseUpdate}
@@ -260,7 +270,7 @@ export default function Home() {
                 variant="outlined"
                 fullWidth
                 value={weight}
-                onChange={(e) => setWeight(parseFloat(e.target.value) || '')}
+                onChange={(e) => setWeight(parseFloat(e.target.value) || 0)}
                 InputProps={{ inputProps: { min: 0 } }}
               />
               <FormControl fullWidth>
@@ -301,7 +311,7 @@ export default function Home() {
                   updateItem(itemName, quantity, weight, unit, category)
                   setItemName('')
                   setQuantity(1)
-                  setWeight('')
+                  setWeight(0)
                   setUnit('kg')
                   setCategory(categories[0])
                   handleCloseUpdate()
